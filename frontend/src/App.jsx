@@ -1,36 +1,41 @@
 import { useState } from "react";
-import React from "react";
+import { getRooms, getReservations, createReservation, cancelReservation } from "./services/reservationService";
 
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const rooms = [
-    {
-      name: "Meeting Room A",
-      capacity: 10,
-      equipment: "Projector, Whiteboard",
-      status: "Available",
-    },
-    {
-      name: "Meeting Room B",
-      capacity: 6,
-      equipment: "TV Screen, Whiteboard",
-      status: "Reserved",
-    },
-    {
-      name: "Study Room 1",
-      capacity: 4,
-      equipment: "Whiteboard",
-      status: "Cleaning",
-    },
-    {
-      name: "Seminar Room",
-      capacity: 20,
-      equipment: "Projector, Sound System",
-      status: "Available",
-    },
-  ];
+  const [roomData] = useState(getRooms());
+  const [reservations, setReservations] = useState(getReservations());
+
+  const handleCreateReservation = () => {
+  const newReservation = createReservation({
+    room: "Meeting Room A",
+    roomId: 1,
+    userName: "Demo User",
+    date: "2026-05-01",
+    time: "12:00 - 13:00",
+    purpose: "New Meeting",
+  });
+
+  setReservations([...reservations, newReservation]);
+  setActivePage("My Reservations");
+};
+
+const handleCancel = (id) => {
+  const updated = cancelReservation(id, reservations);
+  setReservations(updated);
+};
+const totalReservations = reservations.length;
+
+const cancelledCount = reservations.filter(r => r.status === "Cancelled").length;
+
+const activeCount = reservations.filter(r => r.status === "Confirmed").length;
+
+const usageRate = roomData.length > 0
+  ? Math.round((activeCount / roomData.length) * 100)
+  : 0;
+
 
   return isLoggedIn ? (
     <div style={styles.page}>
@@ -58,10 +63,20 @@ function App() {
       </aside>
 
           <main style={styles.main}>
-            {activePage === "Dashboard" && <Dashboard />}
-            {activePage === "Rooms" && <Rooms rooms={rooms} />}
-            {activePage === "Calendar" && <Calendar />}
-            {activePage === "My Reservations" && <MyReservations />}
+            {activePage === "Dashboard" && (
+              <Dashboard 
+                 total={totalReservations}
+                 usage={usageRate}
+                 cancelled={cancelledCount}
+              />
+            )}
+            {activePage === "Rooms" && <Rooms rooms={roomData} />}
+            {activePage === "Calendar" && (
+             <Calendar onCreateReservation={handleCreateReservation} />
+            )}
+            {activePage === "My Reservations" && (
+              <MyReservations reservations={reservations} onCancel={handleCancel} />
+            )}
           </main>
         </div>
       ): (
@@ -69,11 +84,11 @@ function App() {
     );
     }
 
-function Dashboard() {
+function Dashboard({ total, usage, cancelled }) {
   const stats = [
-    { title: "Total Reservations", value: "128", bg: "#E3F2FD" },
-    { title: "Room Usage Rate", value: "76%", bg: "#E8F5E9" },
-    { title: "Cancellation Rate", value: "12%", bg: "#FFEBEE" },
+    { title: "Total Reservations", value: total, bg: "#E3F2FD" },
+    { title: "Room Usage Rate", value: `${usage}%`, bg: "#E8F5E9" },
+    { title: "Cancelled Reservations", value: cancelled, bg: "#FFEBEE" },
     { title: "Most Used Room", value: "Meeting Room A", bg: "#F3E5F5" },
   ];
 
@@ -180,7 +195,7 @@ function Rooms({ rooms }) {
   );
 }
 
-function Calendar() {
+function Calendar({ onCreateReservation }) {
   const timeSlots = [
     { time: "09:00 - 10:00", status: "Available" },
     { time: "10:00 - 11:00", status: "Reserved" },
@@ -238,39 +253,15 @@ function Calendar() {
           ))}
         </div>
 
-        {/* BUTON */}
-        <button style={styles.reserveButton}>
-          Create Reservation
-        </button>
+      <button style={styles.reserveButton} onClick={onCreateReservation}>
+        Create Reservation
+      </button>
       </div>
     </>
   );
 }
 
-function MyReservations() {
-  const reservations = [
-    {
-      room: "Meeting Room A",
-      date: "2026-06-28",
-      time: "09:00 - 10:00",
-      purpose: "Team Meeting",
-      status: "Confirmed",
-    },
-    {
-      room: "Meeting Room B",
-      date: "2026-05-29",
-      time: "13:00 - 14:00",
-      purpose: "Project Discussion",
-      status: "Confirmed",
-    },
-    {
-      room: "Study Room 1",
-      date: "2026-07-30",
-      time: "15:00 - 16:00",
-      purpose: "Study Session",
-      status: "Pending",
-    },
-  ];
+function MyReservations({ reservations, onCancel }) {
 
   return (
     <>
@@ -304,16 +295,27 @@ function MyReservations() {
                     style={{
                       ...styles.smallBadge,
                       background:
-                        item.status === "Confirmed" ? "#DCFCE7" : "#FEF3C7",
+                        item.status === "Confirmed"
+                        ? "#DCFCE7"
+                        : item.status === "Cancelled"
+                        ? "#FEE2E2"
+                        : "#FEF3C7",
+
                       color:
-                        item.status === "Confirmed" ? "#16A34A" : "#D97706",
+                        item.status === "Confirmed"
+                        ? "#16A34A"
+                        : item.status === "Cancelled"
+                        ? "#DC2626"
+                        : "#D97706",
                     }}
                   >
                     {item.status}
                   </span>
                 </td>
                 <td style={styles.td}>
-                  <button style={styles.cancelButton}>Cancel</button>
+                  <button style={styles.cancelButton} onClick={() => onCancel(item.id)}>
+                    Cancel
+                  </button>
                 </td>
               </tr>
             ))}
