@@ -1,96 +1,125 @@
 # RoomReserve Backend Service
 
-FastAPI-based backend service for the RoomReserve Monitoring Panel, designed to manage room reservations, support monitoring dashboards, and integrate with the MySQL database layer.
+FastAPI-based backend service developed for the RoomReserve Monitoring Panel to support room reservation management, technical monitoring, and business logic validation.
 
 ## Overview
-This backend provides REST API endpoints for:
 
-- Viewing available rooms
-- Creating reservations
-- Cancelling reservations
-- Serving analytics and monitoring metrics
+This backend acts as the communication layer between:
 
-It acts as the bridge between the React frontend and the MySQL database.
+- React Frontend
+- MySQL Database Layer
+- Monitoring Dashboard
 
----
-
-## Architecture
-
-Frontend (React)
-↓
-Backend API (FastAPI)
-↓
-Database (MySQL)
+It provides API endpoints for reservation workflows, analytics access, and conflict prevention.
 
 ---
 
-## API Endpoints
+## Core Backend Functions
 
-### Rooms
-- GET /rooms/
-Returns available room data.
+### Room Management
+- View available study rooms and meeting rooms
+- Support room availability queries
 
-### Reservations
-- POST /reservations/
-Creates a reservation.
-
-- DELETE /reservations/{reservation_id}
-Cancels an existing reservation.
-
-### Analytics
-- GET /analytics/
-Returns KPI and monitoring metrics such as:
-- Utilization Rate
-- Error Rate
-- API Latency
+Endpoint:
+GET /rooms/
 
 ---
 
-## Example Response
+## Reservation Management
+Supports:
 
-### GET /rooms/
+- Create reservation
+- Cancel reservation
+- Reservation validation
+- Double-booking prevention
+
+Endpoints:
+
+POST /reservations/
+
+DELETE /reservations/{reservation_id}
+
+---
+
+## Double Booking Prevention Logic
+
+The backend prevents two active reservations for:
+
+- Same room
+- Same date
+- Same time slot
+
+If a duplicate booking is attempted:
+
+- HTTP 409 Conflict is returned
+
+Example conflict response:
 
 ```json
 {
-  "rooms": [
-    "Study Room A",
-    "Meeting Room B",
-    "Conference Room C"
-  ]
+  "detail": "Double booking conflict: this room is already reserved for the selected time slot."
 }
 ```
 
 ---
 
-## Tech Stack
+## Analytics API
+
+Provides monitoring-related metrics such as:
+
+- Utilization Rate
+- Cancellation Rate
+- API Latency (P95 target)
+- Error Rate
+
+Endpoint:
+
+GET /analytics/
+
+---
+
+## Technical Stack
 
 - Python
 - FastAPI
 - Uvicorn
-- MySQL (database integration ready)
+- Pydantic
+- MySQL-ready integration
 
 ---
 
-## Monitoring KPIs Supported
+## Backend Architecture
 
-- Room Utilization
-- Reservation Success Rate
-- Cancellation Rate
-- API Response Latency
+Frontend (React)
+↓
+FastAPI Backend
+↓
+MySQL Database
+↓
+Monitoring Metrics
 
 ---
 
-## Testing
+## Validation and Testing
 
-Endpoints were validated using FastAPI Swagger documentation:
+Validated using Swagger API documentation:
 
 http://127.0.0.1:8000/docs
 
+Tested Scenarios:
+
+✔ Successful reservation creation  
+✔ Duplicate reservation conflict (409)  
+✔ Room listing response  
+✔ Analytics endpoint response
+
 ---
 
-## Developer Notes
+## Backend Deliverables Completed
 
-Current version includes:
-- Working prototype endpoints
-- Modular route structure
-- Database-ready backend architecture
+✔ API Endpoint Structure  
+✔ Business Logic Layer  
+✔ Reservation Conflict Prevention  
+✔ Schema Validation Layer  
+✔ Database Configuration Layer  
+✔ Monitoring Support Endpoints
