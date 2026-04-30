@@ -1,31 +1,56 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getRooms, getReservations, createReservation, cancelReservation } from "./services/reservationService";
 
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const [roomData] = useState(getRooms());
-  const [reservations, setReservations] = useState(getReservations());
+  const [roomData, setRoomData] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [selectedRoomId, setSelectedRoomId] = useState(1);
 
-  const handleCreateReservation = () => {
-  const newReservation = createReservation({
-    room: "Meeting Room A",
-    roomId: 1,
-    userName: "Demo User",
-    date: "2026-05-01",
-    time: "12:00 - 13:00",
-    purpose: "New Meeting",
+useEffect(() => {
+  const fetchData = async () => {
+    const rooms = await getRooms();
+    const reservations = await getReservations();
+
+    setRoomData(rooms);
+    setReservations(reservations);
+  };
+
+  fetchData();
+}, []);
+
+const handleCreateReservation = async ({ room_id, slot_id, reservation_date }) => {
+  const newReservation = await createReservation({
+    user_id: 1,
+    room_id,
+    slot_id,
+    reservation_date,
   });
 
   setReservations([...reservations, newReservation]);
   setActivePage("My Reservations");
+
+  return newReservation;
 };
 
-const handleCancel = (id) => {
-  const updated = cancelReservation(id, reservations);
-  setReservations(updated);
+const handleCancel = async (id) => {
+  try {
+    await cancelReservation(id);
+
+    const updatedReservations = reservations.map((reservation) =>
+      reservation.id === id
+        ? { ...reservation, status: "Cancelled" }
+        : reservation
+    );
+
+    setReservations(updatedReservations);
+  } catch (error) {
+    alert(error.message);
+  }
 };
+
 const totalReservations = reservations.length;
 
 const cancelledCount = reservations.filter(r => r.status === "Cancelled").length;
@@ -70,9 +95,21 @@ const usageRate = roomData.length > 0
                  cancelled={cancelledCount}
               />
             )}
-            {activePage === "Rooms" && <Rooms rooms={roomData} />}
+            
+            {activePage === "Rooms" && (
+            <Rooms
+             rooms={roomData}
+             onReserve={(roomId) => {
+             setSelectedRoomId(roomId);
+             setActivePage("Calendar");
+             }}
+            />
+          )}
             {activePage === "Calendar" && (
-             <Calendar onCreateReservation={handleCreateReservation} />
+             <Calendar
+              onCreateReservation={handleCreateReservation}
+              selectedRoomId={selectedRoomId}
+             />
             )}
             {activePage === "My Reservations" && (
               <MyReservations reservations={reservations} onCancel={handleCancel} />
@@ -158,7 +195,7 @@ function Dashboard({ total, usage, cancelled }) {
   );
 }
 
-function Rooms({ rooms }) {
+function Rooms({ rooms, onReserve  }) {
   return (
     <>
       <PageHeader title="Rooms" subtitle="Browse available meeting and study rooms" />
@@ -184,8 +221,10 @@ function Rooms({ rooms }) {
                   ...styles.reserveButton,
                   opacity: room.status === "Available" ? 1 : 0.5,
                 }}
+                disabled={room.status !== "Available"}
+                onClick={() => onReserve(room.id)}
               >
-                {room.status === "Available" ? "Reserve" : "View"}
+                {room.status === "Available" ? "Reserve" : "Unavailable"}
               </button>
             </div>
           </div>
@@ -195,67 +234,131 @@ function Rooms({ rooms }) {
   );
 }
 
-function Calendar({ onCreateReservation }) {
+function Calendar({ onCreateReservation, selectedRoomId }) {
+  const [roomId, setRoomId] = useState(selectedRoomId || 1);
+  const [reservationDate, setReservationDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+
   const timeSlots = [
-    { time: "09:00 - 10:00", status: "Available" },
-    { time: "10:00 - 11:00", status: "Reserved" },
-    { time: "11:00 - 12:00", status: "Available" },
-    { time: "13:00 - 14:00", status: "Available" },
-    { time: "14:00 - 15:00", status: "Reserved" },
-    { time: "15:00 - 16:00", status: "Cleaning" },
+    { id: 1, time: "09:00 - 10:00", status: "Available" },
+    { id: 2, time: "10:00 - 11:00", status: "Reserved" },
+    { id: 3, time: "11:00 - 12:00", status: "Available" },
+    { id: 4, time: "13:00 - 14:00", status: "Available" },
+    { id: 5, time: "14:00 - 15:00", status: "Reserved" },
+    { id: 6, time: "15:00 - 16:00", status: "Cleaning" },
   ];
+
+  const handleSubmit = async () => {
+    setErrorMessage("");
+
+    if (!reservationDate) {
+      setErrorMessage("Please select a reservation date.");
+      return;
+    }
+
+    if (!selectedSlot) {
+      setErrorMessage("Please select an available time slot.");
+      return;
+    }
+
+    try {
+      await onCreateReservation({
+        room_id: Number(roomId),
+        slot_id: selectedSlot,
+        reservation_date: reservationDate,
+      });
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  };
 
   return (
     <>
       <PageHeader
         title="Calendar"
-        subtitle="Select date and time for reservation"
+        subtitle="Select room, date, and available time slot for reservation"
       />
 
       <div style={styles.panel}>
-        
-        {/* ÜST SEÇİM ALANI */}
         <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
-          
-          <select style={styles.select}>
-            <option>Meeting Room A</option>
-            <option>Meeting Room B</option>
-            <option>Study Room 1</option>
-            <option>Seminar Room</option>
+          <select
+            style={styles.select}
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+          >
+            <option value={1}>Study Room A</option>
+            <option value={2}>Meeting Room B</option>
+            <option value={3}>Conference Room C</option>
           </select>
 
-          <input type="date" style={styles.select} />
+          <input
+            type="date"
+            style={styles.select}
+            value={reservationDate}
+            onChange={(e) => setReservationDate(e.target.value)}
+          />
         </div>
 
-        {/* TIME SLOTS */}
         <div style={styles.slotGrid}>
-          {timeSlots.map((slot, index) => (
-            <div
-              key={index}
-              style={{
-                ...styles.slot,
-                background:
-                  slot.status === "Available"
-                    ? "#DCFCE7"
-                    : slot.status === "Reserved"
-                    ? "#FEE2E2"
-                    : "#FEF3C7",
-                color:
-                  slot.status === "Available"
-                    ? "#16A34A"
-                    : slot.status === "Reserved"
-                    ? "#DC2626"
-                    : "#D97706",
-              }}
-            >
-              {slot.time}
-            </div>
-          ))}
+          {timeSlots.map((slot) => {
+            const isAvailable = slot.status === "Available";
+            const isSelected = selectedSlot === slot.id;
+
+            return (
+              <button
+                key={slot.id}
+                type="button"
+                disabled={!isAvailable}
+                onClick={() => {
+                  if (isAvailable) {
+                    setSelectedSlot(slot.id);
+                    setErrorMessage("");
+                  }
+                }}
+                style={{
+                  ...styles.slot,
+                  border: isSelected ? "2px solid #2563EB" : "2px solid transparent",
+                  opacity: isAvailable ? 1 : 0.5,
+                  background:
+                    slot.status === "Available"
+                      ? "#DCFCE7"
+                      : slot.status === "Reserved"
+                      ? "#FEE2E2"
+                      : "#FEF3C7",
+                  color:
+                    slot.status === "Available"
+                      ? "#16A34A"
+                      : slot.status === "Reserved"
+                      ? "#DC2626"
+                      : "#D97706",
+                }}
+              >
+                <strong>{slot.time}</strong>
+                <br />
+                <span>{slot.status}</span>
+              </button>
+            );
+          })}
         </div>
 
-      <button style={styles.reserveButton} onClick={onCreateReservation}>
-        Create Reservation
-      </button>
+        {errorMessage && (
+          <p style={styles.errorText}>
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+         style={{
+          ...styles.reserveButton,
+          opacity: reservationDate && selectedSlot ? 1 : 0.5,
+          cursor: reservationDate && selectedSlot ? "pointer" : "not-allowed",
+        }}
+        disabled={!reservationDate || !selectedSlot}
+        onClick={handleSubmit}
+        >
+          Create Reservation
+        </button>
       </div>
     </>
   );
@@ -313,9 +416,17 @@ function MyReservations({ reservations, onCancel }) {
                   </span>
                 </td>
                 <td style={styles.td}>
-                  <button style={styles.cancelButton} onClick={() => onCancel(item.id)}>
-                    Cancel
-                  </button>
+                <button
+                 style={{
+                  ...styles.cancelButton,
+                  opacity: item.status === "Cancelled" ? 0.5 : 1,
+                  cursor: item.status === "Cancelled" ? "not-allowed" : "pointer",
+                }}
+                disabled={item.status === "Cancelled"}
+                onClick={() => onCancel(item.id)}
+                >
+                {item.status === "Cancelled" ? "Cancelled" : "Cancel"}
+                </button>
                 </td>
               </tr>
             ))}
@@ -327,6 +438,20 @@ function MyReservations({ reservations, onCancel }) {
 }
 
 function Login({ setIsLoggedIn }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const handleLogin = () => {
+    if (!email.trim() || !password.trim()) {
+      setLoginError("Please enter both email and password.");
+      return;
+    }
+
+    setLoginError("");
+    setIsLoggedIn(true);
+  };
+
   return (
     <div style={styles.loginPage}>
       <div style={styles.loginVisual}>
@@ -349,15 +474,35 @@ function Login({ setIsLoggedIn }) {
           <label style={styles.label}>Email</label>
           <input
             placeholder="Enter your email"
-            style={styles.input}
+            style={{
+              ...styles.input,
+              border: loginError && !email.trim()
+                ? "1px solid #DC2626"
+                : "1px solid #CBD5E1",
+            }}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
 
           <label style={styles.label}>Password</label>
           <input
             type="password"
             placeholder="Enter your password"
-            style={styles.input}
+            style={{
+              ...styles.input,
+              border: loginError && !password.trim()
+                ? "1px solid #DC2626"
+                : "1px solid #CBD5E1",
+            }}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
+
+          {loginError && (
+            <p style={styles.errorText}>
+              {loginError}
+            </p>
+          )}
 
           <div style={styles.loginOptions}>
             <label style={styles.rememberMe}>
@@ -372,7 +517,7 @@ function Login({ setIsLoggedIn }) {
 
           <button
             style={styles.loginButton}
-            onClick={() => setIsLoggedIn(true)}
+            onClick={handleLogin}
           >
             Login
           </button>
@@ -484,6 +629,17 @@ visualText: {
   color: "#475569",
   fontSize: "17px",
   lineHeight: "1.6",
+},
+
+errorText: {
+  color: "#DC2626",
+  background: "#FEE2E2",
+  padding: "10px 12px",
+  borderRadius: "10px",
+  fontSize: "14px",
+  fontWeight: "700",
+  marginTop: "14px",
+  marginBottom: "14px",
 },
 
 loginFormArea: {
@@ -629,6 +785,7 @@ slot: {
   textAlign: "center",
   fontWeight: "600",
   cursor: "pointer",
+  border: "none",
 },
 
   page: {
