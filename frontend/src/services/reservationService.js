@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "http://127.0.0.1:8001";
 
 const fallbackReservations = [
   {
@@ -76,4 +76,40 @@ export const cancelReservation = async (id) => {
   }
 
   return data.reservation || data;
+};
+
+export const getHealthStats = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/analytics/health`);
+    return await res.json();
+  } catch {
+    return { status: "UNKNOWN", total_requests: 0, avg_latency_ms: 0, error_log_count: 0, recent_error_count: 0 };
+  }
+};
+
+export const getLatencyStats = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/analytics/latency`);
+    return await res.json();
+  } catch {
+    return { p50: 0, p95: 0, p99: 0, avg: 0, total_requests: 0 };
+  }
+};
+
+export const getErrorStats = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/analytics/errors`);
+    return await res.json();
+  } catch {
+    return { total_requests: 0, total_errors: 0, error_rate_pct: 0, by_endpoint: [], recent_errors: [] };
+  }
+};
+
+export const getFailedBookings = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/analytics/failed-bookings`);
+    return await res.json();
+  } catch {
+    return { total_conflicts: 0, conflicts: [] };
+  }
 };

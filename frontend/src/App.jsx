@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getRooms, getReservations, createReservation, cancelReservation } from "./services/reservationService";
+import { getRooms, getReservations, createReservation, cancelReservation, getHealthStats, getLatencyStats, getErrorStats, getFailedBookings } from "./services/reservationService";
 
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
@@ -68,7 +68,7 @@ const usageRate = roomData.length > 0
         <h2 style={styles.logo}>RoomPanel</h2>
 
         <nav style={styles.nav}>
-          {["Dashboard", "Rooms", "Calendar", "My Reservations"].map((item) => (
+          {["Dashboard", "Rooms", "Calendar", "My Reservations", "Monitoring"].map((item) => (
             <div
               key={item}
               onClick={() => setActivePage(item)}
@@ -113,6 +113,9 @@ const usageRate = roomData.length > 0
             )}
             {activePage === "My Reservations" && (
               <MyReservations reservations={reservations} onCancel={handleCancel} />
+            )}
+            {activePage === "Monitoring" && (
+              <MonitoringDashboard />
             )}
           </main>
         </div>
@@ -189,6 +192,219 @@ function Dashboard({ total, usage, cancelled }) {
               </span>
             </div>
           ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function MonitoringDashboard() {
+  const [health, setHealth] = useState({
+    status: "LOADING",
+    total_requests: 0,
+    avg_latency_ms: 0,
+    error_log_count: 0,
+    recent_error_count: 0,
+  });
+  const [latency, setLatency] = useState({ p50: 0, p95: 0, p99: 0, avg: 0, total_requests: 0 });
+  const [errors, setErrors] = useState({
+    total_requests: 0,
+    total_errors: 0,
+    error_rate_pct: 0,
+    by_endpoint: [],
+    recent_errors: [],
+  });
+  const [failedBookings, setFailedBookings] = useState({ total_conflicts: 0, conflicts: [] });
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      const [h, l, e, fb] = await Promise.all([
+        getHealthStats(),
+        getLatencyStats(),
+        getErrorStats(),
+        getFailedBookings(),
+      ]);
+      setHealth(h);
+      setLatency(l);
+      setErrors(e);
+      setFailedBookings(fb);
+    };
+    fetchAll();
+    const id = setInterval(fetchAll, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  const healthColor = {
+    HEALTHY: "#16A34A", WARNING: "#D97706", DEGRADED: "#DC2626",
+    LOADING: "#64748B", UNKNOWN: "#64748B",
+  };
+  const healthBg = {
+    HEALTHY: "#DCFCE7", WARNING: "#FEF3C7", DEGRADED: "#FEE2E2",
+    LOADING: "#F1F5F9", UNKNOWN: "#F1F5F9",
+  };
+
+  return (
+    <>
+      <PageHeader title="Monitoring" subtitle="System health, latency tracking, and error logs — live (15s)" />
+
+      <section style={styles.cardsGrid}>
+        <div style={{ ...styles.card, background: healthBg[health.status] || "#F1F5F9" }}>
+          <p style={styles.cardTitle}>System Status</p>
+          <h2 style={{ ...styles.cardValue, color: healthColor[health.status] || "#64748B" }}>
+            {health.status}
+          </h2>
+        </div>
+        <div style={{ ...styles.card, background: "#E3F2FD" }}>
+          <p style={styles.cardTitle}>Total Requests</p>
+          <h2 style={styles.cardValue}>{latency.total_requests}</h2>
+        </div>
+        <div style={{ ...styles.card, background: "#F3E5F5" }}>
+          <p style={styles.cardTitle}>P95 Latency</p>
+          <h2 style={styles.cardValue}>{latency.p95} ms</h2>
+        </div>
+        <div style={{ ...styles.card, background: errors.error_rate_pct > 5 ? "#FFEBEE" : "#E8F5E9" }}>
+          <p style={styles.cardTitle}>Error Rate</p>
+          <h2 style={styles.cardValue}>{errors.error_rate_pct}%</h2>
+        </div>
+      </section>
+
+      <section style={{ ...styles.bottomGrid, marginTop: "24px" }}>
+        <div style={styles.panel}>
+          <h3 style={styles.panelTitle}>Latency Breakdown</h3>
+          {[
+            { label: "P50 (Median)", value: latency.p50, color: "#16A34A" },
+            { label: "P95", value: latency.p95, color: "#D97706" },
+            { label: "P99", value: latency.p99, color: "#DC2626" },
+            { label: "Average", value: latency.avg, color: "#3B82F6" },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={styles.usageRow}>
+              <div style={styles.usageText}>
+                <span>{label}</span>
+                <span style={{ color, fontWeight: 700 }}>{value} ms</span>
+              </div>
+              <div style={styles.progressBg}>
+                <div
+                  style={{
+                    ...styles.progressFill,
+                    width: `${Math.min((value / 2000) * 100, 100)}%`,
+                    background: color,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={styles.panel}>
+          <h3 style={styles.panelTitle}>Errors by Endpoint</h3>
+          {errors.by_endpoint.length === 0 ? (
+            <p style={{ color: "#64748B", marginTop: 0 }}>No errors recorded.</p>
+          ) : (
+            errors.by_endpoint.map((item, i) => (
+              <div key={i} style={styles.usageRow}>
+                <div style={styles.usageText}>
+                  <span style={{ fontFamily: "monospace", fontSize: "13px" }}>{item.endpoint}</span>
+                  <span style={{ color: "#DC2626", fontWeight: 700 }}>{item.count}</span>
+                </div>
+                <div style={styles.progressBg}>
+                  <div
+                    style={{
+                      ...styles.progressFill,
+                      width: `${Math.min(item.count * 20, 100)}%`,
+                      background: "#DC2626",
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+          <div style={{ marginTop: "16px", padding: "12px", background: "#F8FAFC", borderRadius: "10px" }}>
+            <span style={{ color: "#64748B", fontSize: "14px" }}>
+              {errors.total_errors} errors / {errors.total_requests} total requests
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ ...styles.bottomGrid, marginTop: "24px" }}>
+        <div style={styles.panel}>
+          <h3 style={styles.panelTitle}>Recent Error Logs</h3>
+          {errors.recent_errors.length === 0 ? (
+            <p style={{ color: "#64748B", marginTop: 0 }}>No errors logged.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Time</th>
+                  <th style={styles.th}>Code</th>
+                  <th style={styles.th}>Endpoint</th>
+                  <th style={styles.th}>Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errors.recent_errors.map((log, i) => (
+                  <tr key={i}>
+                    <td style={{ ...styles.td, fontSize: "12px", fontFamily: "monospace" }}>{log.logged_at}</td>
+                    <td style={{ ...styles.td, fontWeight: 700, color: "#DC2626", fontSize: "12px" }}>{log.error_code}</td>
+                    <td style={{ ...styles.td, fontFamily: "monospace", fontSize: "12px" }}>{log.endpoint}</td>
+                    <td style={styles.td}>
+                      <span style={{
+                        padding: "3px 8px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        background: log.severity === "ERROR" || log.severity === "FATAL" ? "#FEE2E2" : "#FEF3C7",
+                        color: log.severity === "ERROR" || log.severity === "FATAL" ? "#DC2626" : "#D97706",
+                      }}>
+                        {log.severity}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div style={styles.panel}>
+          <h3 style={styles.panelTitle}>
+            Failed Booking Attempts
+            <span style={{
+              marginLeft: "10px",
+              padding: "3px 10px",
+              background: "#FEE2E2",
+              color: "#DC2626",
+              borderRadius: "999px",
+              fontSize: "14px",
+              fontWeight: 700,
+            }}>
+              {failedBookings.total_conflicts}
+            </span>
+          </h3>
+          {failedBookings.conflicts.length === 0 ? (
+            <p style={{ color: "#64748B", marginTop: 0 }}>No booking conflicts recorded.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Time</th>
+                  <th style={styles.th}>Code</th>
+                  <th style={styles.th}>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failedBookings.conflicts.map((log, i) => (
+                  <tr key={i}>
+                    <td style={{ ...styles.td, fontSize: "12px", fontFamily: "monospace" }}>{log.logged_at}</td>
+                    <td style={{ ...styles.td, fontWeight: 700, color: "#D97706", fontSize: "12px" }}>{log.error_code}</td>
+                    <td style={{ ...styles.td, fontSize: "13px", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {log.error_message}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
     </>

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas import ReservationCreate
+from app.log_store import add_error_log
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
 
@@ -38,6 +39,14 @@ def create_reservation(data: ReservationCreate):
             and reservation["reservation_date"] == str(data.reservation_date)
             and reservation["status"] != "Cancelled"
         ):
+            add_error_log(
+                error_code="BOOKING_CONFLICT",
+                error_message=f"Double booking for room {data.room_id}, slot {data.slot_id} on {data.reservation_date}",
+                endpoint="/reservations/",
+                http_method="POST",
+                severity="WARN",
+                user_id=data.user_id,
+            )
             raise HTTPException(
                 status_code=409,
                 detail="Double booking conflict: this room is already reserved for the selected time slot."

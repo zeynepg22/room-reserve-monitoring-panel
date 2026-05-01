@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes.rooms import router as rooms_router
 from app.routes.reservations import router as reservations_router
 from app.routes.analytics import router as analytics_router
 
 app = FastAPI(title="RoomReserve Backend")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -13,6 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(LoggingMiddleware)
 
 app.include_router(rooms_router)
 app.include_router(reservations_router)
